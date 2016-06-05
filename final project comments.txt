@@ -1,0 +1,12 @@
+Thanks for a fun class, Nick!
+
+Important note: If you run the script, I strongly advise you download the playbyplay_data.rds file in to the working directory.  If you don’t, the script could take up to 30 minutes to complete as it downloads/transforms the play-by-play data for all NBA games identified.
+
+My write-up is presented as the HTML document.  I used R markdown to prepare it.
+
+This ended up being 85% data acquisition and transformation, but I had a blast doing it.
+
+If time allows, could you offer some feedback on my write up?  I'd like to see if it's "presentation ready" before I share it with some mentors at work.
+
+Thanks again!
+-Mark

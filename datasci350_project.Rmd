@@ -1,0 +1,356 @@
+---
+title: "UW PCE Data Science 350 - Final Project"
+author: "Mark Kazzaz"
+date: "June 2, 2016"
+output: 
+  html_document:
+    toc: true
+    toc_float: false
+    theme: united
+---
+
+# Project Overview
+The aim of this project was to perform statistical analysis on NBA data.  I set out to test two hypotheses:
+
+*  Hypothesis One: Box score summary data can be used to classify a win or a loss with 90%+ accuracy.
+    +  Box score summary data consists of: minutes played, points scored, field goals made/attempted, three pointers made/attempted, free throws made/attempted, offensive & defensive rebounds, assists, steals, blocks, turnovers, and personal fouls.
+    +  I intentionally set a high accuracy rate of 90% because the box score summary data is only available *after* an NBA game concludes.  So in reality, you would already know if a team won or loss when box score summary data is available.
+
+*  Hypothesis Two: Q4 fouls contribute to wins in non-overtime regular season games.
+    + NBA is unique from other sports in that taking fouls can be part of a game strategy.  
+    + Fouling is notorious during Q4.
+    + I decided to avoid overtime games.
+        - Overtime periods are only five minutes and could bring out a different style of play compared to regular clock time.
+
+## Note on below code snippets
+
+The below code snippets are provided to help guide you through my basic methodology for acquiring, transforming, and analyzing the data.  Not all code used is presented in this write up.  
+
+If you're interested in seeing all my code, you can download it [here](https://www.dropbox.com/s/q7reaegp4a8wpbz/nba%20stats.r?dl=1).
+
+# Data acquisition
+
+## NBA.com/Stats website
+
+[NBA.com/Stats](http://stats.nba.com) is a site dedicated to making a variety of NBA stats available to review.  The struggle is they intentionally don't make it available for usage outside of their website.  Per their [FAQ](http://stats.nba.com/help/faq/):
+
+> Q: Are your statistics availble for download, or in CSV form?
+>
+> A: Our stats are not available for download for either academic or personal use. They are for viewing and enjoying on NBA.com/Stats
+
+
+Bummer.  This meant I was going to have to find a way to scrape their webpage or find an alternate source.  After talking with some people on Reddit, I learned I could use Chrome's developer tools to identify the javascript data files being called to generate stats on a page.  After studying the javascript calls, I found calls to webpages that produced files that looked like this:
+
+
+```
+source: http://stats.nba.com/stats/commonallplayers?IsOnlyCurrentSeason=0&LeagueID=00&Season=2015-16
+
+result:
+{"resource":"commonallplayers","parameters":{"LeagueID":"00","Season":"2015-16","IsOnlyCurrentSeason":0},"resultSets":[{"name":"CommonAllPlayers","headers":["PERSON_ID","DISPLAY_LAST_COMMA_FIRST","DISPLAY_FIRST_LAST","ROSTERSTATUS","FROM_YEAR","TO_YEAR","PLAYERCODE","TEAM_ID","TEAM_CITY","TEAM_NAME","TEAM_ABBREVIATION","TEAM_CODE","GAMES_PLAYED_FLAG"],"rowSet":[[76001,"Abdelnaby, Alaa","Alaa Abdelnaby",0,"1990","1994","HISTADD_alaa_abdelnaby",0,"","","","","Y"],[76002,"Abdul-Aziz, Zaid","Zaid Abdul-Aziz",0,"1968","1977","HISTADD_zaid_abdul-aziz",0,"","","","","Y"],[76003,"Abdul-Jabbar, Kareem","Kareem Abdul-Jabbar",0,"1969","1988","HISTADD_kareem_abdul-jabbar",0,"","","","","Y"],[51,"Abdul-Rauf, Mahmoud","Mahmoud Abdul-Rauf",0,"1990","2000","HISTADD_mahmoud_abdul-rauf",0,"","","","","Y"],[1505,"Abdul-Wahad, Tariq","Tariq Abdul-Wahad",0,"1997","2003","tariq_abdul-wahad",0,"","","","","Y"],[949,"Abdur-Rahim, Shareef","Shareef Abdur-Rahim",0,"1996","2007","shareef_abdur-rahim",0,"","","","","Y"],[76005,"Abernethy, Tom","Tom Abernethy",0,"1976","1980","HISTADD_tom_abernethy",0,"","","","","Y"],[76006,"Able, Forest","Forest Able",0,"1956","1956","HISTADD_frosty_able",0,"","","","","Y"],[76007,"Abramovic, John","John Abramovic",0,"1946","1947","HISTADD_brooms_abramovic",0,"","","","","Y"],[101165,"Acker, Alex","Alex Acker",0,"2005","2008","alex_acker",0,"","","","","Y"],[76008,"Ackerman, Donald","Donald Ackerman",0,"1953","1953","HISTADD_buddy_ackerman",0,"","","","","Y"],[76009,"Acres, Mark","Mark Acres",0,"1987","1992","HISTADD_mark_acres",0,"","","","","Y"],[76010,"Acton, Charles","Charles Acton",0,"1967","1967","HISTADD_bud_acton",0,"","","","","Y"],[203112,"Acy, Quincy","Quincy Acy",1,"2012","2015","quincy_acy",1610612758,"Sacramento","Kings","SAC","kings","Y"]
+[...]
+```
+
+## Reading data from NBA.com/Stats
+
+Knowing that the data is available to grab, I would have to write some regular expression functions to help ready the data in to a consumable format.  To do so, I modified the following formula with the help [from this site](http://rstudio-pubs-static.s3.amazonaws.com/11288_111663babc4f44359a35b1f5f1a22b89.html):
+
+```{r eval=FALSE}
+read_nba_stats <- function(address) {
+  web_page <- readLines(address, warn=FALSE)
+  x1 <- gsub("[\\{\\}\\]]", "", web_page, perl = TRUE)
+  x2 <- gsub("[\\[]", "\n", x1, perl = TRUE)
+  x3 <- gsub("\"rowSet\":\n", "", x2, perl = TRUE)
+  x4 <- gsub(";", ",", x3, perl = TRUE)
+  nba <- read.table(textConnection(x4), header = T, sep = ",", skip = 2, stringsAsFactors = FALSE, fill=TRUE)
+  closeAllConnections()
+  return(nba)
+}
+```
+
+You'll notice I added a `closeAllConnection()` command in the above code.  This is because when I was using the formula to download 1000+ play-by-play data logs, R would run out of connections.  Adding `closeAllConnection()` after each run ensured I was able to use my `read_nba_stats()` function without running out of connections.
+
+## Data for hypothesis one
+
+In order to test this hypothesis, I needed all the box score summary results for all 30 teams for each of their 82 regular season games.  No way I was going to copy/paste 82 links via Chrome developer tools to figure this out.  Instead, I took the following approach:
+
+1. Found a javascript data file that contained all players and their current team assignments.
+    i) [File link](http://stats.nba.com/stats/commonallplayers?IsOnlyCurrentSeason=0&LeagueID=00&Season=2015-16).
+    i) This file had teams identified as `TEAM_ID` values.
+2. Studied the pattern of box summary data links.
+    i) By reviewing about 10 links, I found the `TEAM_ID` value was the only thing that changed between them.
+3. Wrote code to:
+    i) Download player list.
+    i) Identify unique teams.
+    i) Create a list of javascript data URLs.
+    i) Use the `read_nba_stats()` formula to obtain all team's box score summary data.
+
+The code used was...
+```{r eval=FALSE}
+  ## OBTAIN PLAYER LIST
+  players_url <- "http://stats.nba.com/stats/commonallplayers?IsOnlyCurrentSeason=0&LeagueID=00&Season=2015-16"
+  players <- read_nba_stats(players_url)
+  
+  ## FILTER TO UNIQUE TEAMS
+  teams = unique(players[,c('TEAM_ID','TEAM_NAME')])
+  teams = teams[teams$TEAM_ID != 0,]
+  
+  ##CREATE URLS TO OBTAIN TEAM SEASON DATA FROM
+  teams$url = paste0("http://stats.nba.com/stats/teamgamelog?LeagueID=00&Season=2015-16&SeasonType=Regular+Season&TeamID=", teams$TEAM_ID)
+  
+  ##DOWNLOAD DATA AND CREATE DATA FRAME
+  season_data = lapply(teams$url, read_nba_stats)
+  season_data = do.call(rbind.data.frame, season_data)
+```
+
+...and it turned data that looked like...
+```
+source: http://stats.nba.com/stats/teamgamelog?LeagueID=00&Season=2015-16&SeasonType=Regular+Season&TeamID=1610612747
+  
+result:
+{"resource":"teamgamelog","parameters":{"TeamID":1610612747,"LeagueID":"00","Season":"2015-16","SeasonType":"Regular Season"},"resultSets":[{"name":"TeamGameLog","headers":["Team_ID","Game_ID","GAME_DATE","MATCHUP","WL","MIN","FGM","FGA","FG_PCT","FG3M","FG3A","FG3_PCT","FTM","FTA","FT_PCT","OREB","DREB","REB","AST","STL","BLK","TOV","PF","PTS"],"rowSet":[[1610612747,"0021501228","APR 13, 2016","LAL vs. UTA","W",240,41,85,0.482,6,25,0.240,13,15,0.867,8,39,47,19,6,3,13,17,101],[1610612747,"0021501209","APR 11, 2016","LAL @ OKC","L",240,23,81,0.284,7,31,0.226,26,30,0.867,10,38,48,15,8,1,15,20,79],[1610612747,"0021501195","APR 10, 2016","LAL @ HOU","L",240,41,83,0.494,12,28,0.429,16,19,0.842,7,33,40,25,10,3,18,15,110],[1610612747,"0021501184","APR 08, 2016","LAL @ NOP","L",240,34,81,0.420,11,24,0.458,23,27,0.852,10,24,34,18,9,5,13,23,102],[1610612747,"0021501172","APR 06, 2016","LAL vs. LAC","L",240,32,90,0.356,4,19,0.211,13,17,0.765,16,33,49,12,6,1,12,16,81],[1610612747,"0021501164","APR 05, 2016","LAL @ LAC","L",240,26,83,0.313,6,20,0.300,23,25,0.920,14,29,43,11,10,3,15,23,81],[1610612747,"0021501153","APR 03, 2016","LAL vs. BOS","L",240,37,90,0.411,6,21,0.286,20,29,0.690,11,36,47,22,6,4,11,17,100],[1610612747,"0021501121","MAR 30, 2016","LAL vs. MIA","W",265,37,102,0.363,6,20,0.300,22,29,0.759,19,30,49,14,9,5,9,21,102],[1610612747,"0021501104","MAR 28, 2016","LAL @ UTA","L",240,26,85,0.306,7,20,0.350,16,22,0.727,7,30,37,11,5,6,9,19,75],[1610612747,"0021501096","MAR 27, 2016","LAL vs. WAS","L",240,33,87,0.379,7,28,0.250,15,17,0.882,12,30,42,15,12,0,18,26,88],[1610612747,"0021501081","MAR 25, 2016","LAL vs. DEN","L",240,37,85,0.435,10,23,0.435,21,26,0.808,7,36,43,23,6,3,11,19,105],[1610612747,"0021501065","MAR 23, 2016","LAL @ PHX","L",240,39,93,0.419,7,27,0.259,22,26,0.846,14,27,41,13,6,6,10,24,107]
+[...]
+```
+
+...in to this:
+```
+> str(season_data)
+'data.frame':	2460 obs. of  25 variables:
+ $ Team_ID  : int  1610612758 1610612758 1610612758 1610612758 1610612758 1610612758 1610612758 1610612758 1610612758 1610612758 ...
+ $ Game_ID  : int  21501224 21501211 21501193 21501176 21501162 21501141 21501135 21501120 21501105 21501095 ...
+ $ GAME_DATE: chr  "APR 13, 2016" "APR 11, 2016" "APR 09, 2016" "APR 07, 2016" ...
+ $ MATCHUP  : chr  "SAC @ HOU" "SAC @ PHX" "SAC vs. OKC" "SAC vs. MIN" ...
+ $ WL       : Factor w/ 2 levels "L","W": 1 2 2 1 1 2 1 2 1 2 ...
+ $ MIN      : int  240 240 240 240 240 240 240 240 240 240 ...
+ $ FGM      : int  32 41 45 36 41 41 38 47 37 51 ...
+ $ FGA      : int  96 83 94 85 78 88 87 84 89 82 ...
+ $ FG_PCT   : num  0.333 0.494 0.479 0.424 0.526 0.466 0.437 0.56 0.416 0.622 ...
+ $ FG3M     : int  11 6 13 6 11 8 7 8 7 9 ...
+ $ FG3A     : int  37 17 32 17 22 21 21 18 15 20 ...
+ $ FG3_PCT  : num  0.297 0.353 0.406 0.353 0.5 0.381 0.333 0.444 0.467 0.45 ...
+ $ FTM      : int  6 17 11 19 14 25 23 18 12 22 ...
+ $ FTA      : int  13 28 20 21 21 31 29 25 19 30 ...
+ $ FT_PCT   : num  0.462 0.607 0.55 0.905 0.667 0.806 0.793 0.72 0.632 0.733 ...
+ $ OREB     : int  15 4 16 17 3 11 16 6 11 6 ...
+ $ DREB     : int  34 36 24 30 31 37 25 34 32 35 ...
+ $ REB      : int  49 40 40 47 34 48 41 40 43 41 ...
+ $ AST      : int  21 25 22 19 20 27 20 27 20 32 ...
+ $ STL      : int  11 11 12 11 6 4 7 13 11 11 ...
+ $ BLK      : int  4 12 4 5 7 5 5 6 2 3 ...
+ $ TOV      : int  17 18 11 19 19 7 13 16 14 11 ...
+ $ PF       : int  17 19 23 23 19 20 16 15 20 18 ...
+ $ PTS      : int  81 105 114 97 107 115 106 120 93 133 ...
+```
+
+## Data for hypothesis two
+
+In order to test this hypothesis, I needed to do a few things:
+
+1.  Determine which games of the (30 * 82) = 2460 games were non-overtime games.
+    i) This ended up being easy as games with (5 players * 4 periods * 12 minutes/period) = 240 minutes were non-overtime games.
+    i) Using minutes, I found 2306 regular season non-overtime games.
+    i) Fortunately, the box score data included the GAME_ID attribute.  I used this attribute to create a list of play-by-play URLs to download via `read_NBA_stats()`.
+2.  Download the play-by-play data for all non-overtime games.
+    i) This ended up not being so easy.
+    i) After identifying the non-overtime regular season games in (1), I initially downloaded all 2306 play-by-play logs.  The data didn't look right when I was studying it.  I realized that two teams share a single game log which meant I effectively downloaded double the data I was after.
+    i) I ran a `unique()` function on my play-by-play URL and found the list reduced from 2306 URLs to 1153 URLs.  Downloaded this list of URLs instead and the data looked much better.
+    i) Even though I only needed 1153 javascript files to get all play-by-play data, I need a total record count of 2306 games (home team + away team) to merge back to the box score summary data.
+3.  Figure out which play-by-play events were fouls and which ones weren't.
+    i) I ended up relying on the description of the game event to determine if an event was a foul or not.
+    i) I made use of `grepl()` to determine a TRUE/FALSE attribute then reduced the dataset to only fouls.
+    i) Finally, I summarized the foul data, made two objects (one for the home team and one for the away team), then merged it back in to the summary box score data so I could see how many fouls per period occurred for a given game.
+    
+The code to build out this data was:
+```{r eval=FALSE}
+  ## IDENTIFY NONOVERTIME GAMES (240 minutes = 12 minutes * 4 quarters * 5 players)
+  season_data$nonovertime <- season_data$MIN == 240
+  nonovertime_data <- season_data[season_data$nonovertime == TRUE,]
+  
+  ## OBTAIN PLAY BY PLAY
+  ### DOWNLOAD or LOAD DATA
+  #### NBA Stats website expecting a 10 character game ID
+  nonovertime_data$Game_ID = formatC(nonovertime_data$Game_ID, width=10, format = "d", flag="0")  
+  
+  playbyplay_url = paste0("http://stats.nba.com/stats/playbyplayv2?EndPeriod=10&EndRange=55800&GameID=",
+    nonovertime_data$Game_ID,"&RangeType=2&Season=2015-16&SeasonType=Playoffs&StartPeriod=1&StartRange=0")
+
+  playbyplay_url = unique(playbyplay_url)     # Two teams share a game log, need to reduce to unique game
+                                              # log or else I'll download duplicates of every game log.
+  
+  ### NOTE:   THE FOLLOWING COMMAND CAN TAKE 20+ MINUTES IF
+  ###         PREVIOUSLY SAVED DATA FILE IS NOT FOUND
+
+  playbyplay_data <- load_playbyplay_data()   # This function would first check and see if
+                                              # I already downloaded the data and try to load from disk.
+                                              # This was necessary as downloading/transforming the data
+                                              # from scratch took 30+ minutes.
+  
+  ### CREATE SUMMARY MEASURES FROM PLAY BY PLAY DATA
+  #### Figure out which rows are fouls and which events are for the Home team or Away team
+  playbyplay_data$IS_FOUL <- as.numeric(grepl("FOUL ", paste0(playbyplay_data$HOMEDESCRIPTION, 
+    playbyplay_data$VISITORDESCRIPTION)))
+  
+  playbyplay_data$IS_HOME <- playbyplay_data$HOMEDESCRIPTION != "null"
+  playbyplay_data$IS_AWAY <- playbyplay_data$VISITORDESCRIPTION != "null"
+  
+  playbyplay_data_home <- playbyplay_data[playbyplay_data$IS_HOME == TRUE,]
+  playbyplay_data_away <- playbyplay_data[playbyplay_data$IS_AWAY == TRUE,]
+  
+  playbyplay_foul_home <- aggregate(playbyplay_data_home$IS_FOUL, 
+    by=list(GAME_ID=playbyplay_data_home$GAME_ID, PERIOD=playbyplay_data_home$PERIOD), sum)
+  
+  playbyplay_foul_home$TEAM = "HOME"
+  
+  playbyplay_foul_away <- aggregate(playbyplay_data_away$IS_FOUL, 
+    by=list(GAME_ID=playbyplay_data_away$GAME_ID, PERIOD=playbyplay_data_away$PERIOD), sum)
+  
+  playbyplay_foul_away$TEAM = "AWAY"
+  
+  playbyplay_foul_summary <- rbind(playbyplay_foul_away,playbyplay_foul_home)
+  names(playbyplay_foul_summary) <- c("Game_ID","PERIOD","FOULS","TEAM")
+  
+  ####  Side comment: spent too much time trying to figure out how to pivot the data
+  ####  so I could have period sums shown as variables.  Played around with MELT()/CAST()
+  ####  but nothing quite did it.  Ended up going through the below manual steps instead.
+  
+  playbyplay_foul_summary1 <- playbyplay_foul_summary[playbyplay_foul_summary$PERIOD == 1,]
+  playbyplay_foul_summary1$PERIOD <- NULL
+  names(playbyplay_foul_summary1)[2] <- "PERIOD1"
+  
+  playbyplay_foul_summary2 <- playbyplay_foul_summary[playbyplay_foul_summary$PERIOD == 2,]
+  playbyplay_foul_summary2$PERIOD <- NULL
+  names(playbyplay_foul_summary2)[2] <- "PERIOD2"
+  
+  playbyplay_foul_summary3 <- playbyplay_foul_summary[playbyplay_foul_summary$PERIOD == 3,]
+  playbyplay_foul_summary3$PERIOD <- NULL
+  names(playbyplay_foul_summary3)[2] <- "PERIOD3"
+  
+  playbyplay_foul_summary4 <- playbyplay_foul_summary[playbyplay_foul_summary$PERIOD == 4,]
+  playbyplay_foul_summary4$PERIOD <- NULL
+  names(playbyplay_foul_summary4)[2] <- "PERIOD4"
+  
+  playbyplay_foul_pivot <- merge(playbyplay_foul_summary1, playbyplay_foul_summary2)
+  playbyplay_foul_pivot <- merge(playbyplay_foul_pivot, playbyplay_foul_summary3)
+  playbyplay_foul_pivot <- merge(playbyplay_foul_pivot, playbyplay_foul_summary4)
+  
+  ## MERGE FOUL DATA WITH BOX SCORE SUMMARY DATA &
+  ## IDENTIFY HOME/AWAY TEAMS IN BOX SCORE SUMMARY DATA
+  
+  ### Function to figure out which rows in box summary data were home or away teams
+  home_or_away <- function(x){
+    sign = grepl("@",x)
+    if (sign){tag="AWAY"}else{tag="HOME"}
+    return(tag)
+  }
+  
+  ### Use home_or_away function then prepare season_data$GAME_ID for a merge
+  season_data$TEAM <- lapply(season_data$MATCHUP, home_or_away)
+  season_data$Game_ID <- formatC(season_data$Game_ID, width=10, format = "d", flag="0")
+  
+  ## MERGE TOGETHER THE DATASETS
+  season_data_w_fouls <- merge(season_data, playbyplay_foul_pivot, by = c("Game_ID","TEAM"))
+```
+
+
+# Evaluating hypothesis one
+
+## Confusion matrix for Naive Bayes model
+
+Now that I have all the box score summary data for all teams, I ran a Naive Bayes classification model, predicted the test dataset, and found the results didn't hit 90%:
+
+Code for model:
+```{r eval=FALSE}
+  ##CLASSIFICATION MODEL via NAIVE BAYES
+  set.seed(101)
+  alpha     <- 0.8 # percentage of training set
+  nba_train_ind   <- sample(1:nrow(season_data), alpha * nrow(season_data))
+  nba_train <- season_data[nba_train_ind,]
+  nba_test  <- season_data[-nba_train_ind,]
+  
+  nba_nb <- naiveBayes(WL ~ 
+              MIN + FG_PCT + FG3_PCT + FT_PCT + OREB + DREB + AST + STL + BLK + TOV + PF, 
+              data = nba_train)
+  
+  nba_nb_predict <- predict(nba_nb, newdata = nba_test, type="class")
+  
+  confusionMatrix(nba_nb_predict, nba_test$WL)
+```
+
+Results:
+```
+Confusion Matrix and Statistics
+
+          Reference
+Prediction   L   W
+         L 196  74
+         W  44 178
+                                          
+               Accuracy : 0.7602          
+                 95% CI : (0.7199, 0.7972)
+    No Information Rate : 0.5122          
+    P-Value [Acc > NIR] : < 2.2e-16       
+                                          
+                  Kappa : 0.5215          
+ Mcnemar's Test P-Value : 0.007593        
+                                          
+            Sensitivity : 0.8167          
+            Specificity : 0.7063          
+         Pos Pred Value : 0.7259          
+         Neg Pred Value : 0.8018          
+             Prevalence : 0.4878          
+         Detection Rate : 0.3984          
+   Detection Prevalence : 0.5488          
+      Balanced Accuracy : 0.7615          
+                                          
+       'Positive' Class : L  
+```
+## Hypothesis one result
+
+My classification model is able to predict just over 76% of the box summary test dataset's win or loss outcome.  It's better than a random guess at 50%, but still doesn't meet my criteria of 90%+.
+
+# Evaluating hypothesis two
+
+## Summary of Logstic Regression model
+With fouls by period added to the box score data, I created a logistic regression model to determine which attributes were significant for a game's win/loss result.  The output of the model was:
+
+```
+Call:
+glm(formula = as.numeric(GAME_WIN) ~ MIN + FG_PCT + FG3_PCT + 
+    FT_PCT + OREB + DREB + AST + STL + BLK + TOV + PERIOD1 + 
+    PERIOD2 + PERIOD3 + PERIOD4, family = binomial, data = season_data_w_fouls)
+
+Deviance Residuals: 
+     Min        1Q    Median        3Q       Max  
+-2.72488  -0.52346   0.00059   0.48638   2.86158  
+
+Coefficients: (1 not defined because of singularities)
+              Estimate Std. Error z value Pr(>|z|)    
+(Intercept) -34.682032   1.590960 -21.799  < 2e-16 ***
+MIN                 NA         NA      NA       NA    
+FG_PCT       38.566564   2.074384  18.592  < 2e-16 ***
+FG3_PCT       5.900999   0.750603   7.862 3.79e-15 ***
+FT_PCT        4.378345   0.623930   7.017 2.26e-12 ***
+OREB          0.213764   0.019059  11.216  < 2e-16 ***
+DREB          0.348545   0.017750  19.637  < 2e-16 ***
+AST          -0.045782   0.015830  -2.892  0.00383 ** 
+STL           0.300233   0.024025  12.497  < 2e-16 ***
+BLK           0.121966   0.025613   4.762 1.92e-06 ***
+TOV          -0.227602   0.017869 -12.737  < 2e-16 ***
+PERIOD1      -0.081314   0.038061  -2.136  0.03265 *  
+PERIOD2      -0.000273   0.033685  -0.008  0.99353    
+PERIOD3      -0.030951   0.032959  -0.939  0.34769    
+PERIOD4      -0.066305   0.029740  -2.229  0.02578 *  
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+(Dispersion parameter for binomial family taken to be 1)
+
+    Null deviance: 3196.8  on 2305  degrees of freedom
+Residual deviance: 1626.7  on 2292  degrees of freedom
+AIC: 1654.7
+
+Number of Fisher Scoring iterations: 6
+```
+
+## Hypothesis two result
+
+The null hypothesis would be "Q4 fouls do not contribute to game wins".  With a PERIOD4 p-value of 0.02578, we have weak evidence to prove false the null hypothesis at a 95% confidence level.  This isn't a sure fire conclusion that Q4 fouls contribute to game wins, but it is evidence that there's some significance associated to Q4 fouls and game wins.

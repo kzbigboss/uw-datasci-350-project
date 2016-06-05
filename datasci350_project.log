@@ -1,0 +1,38 @@
+2016-06-01 19:29:28 INFO::PROGRAM START: FINAL PROJECT
+2016-06-01 19:29:28 INFO::Obtaining player list from: http://stats.nba.com/stats/commonallplayers?IsOnlyCurrentSeason=0&LeagueID=00&Season=2015-16
+2016-06-01 19:29:30 INFO::4073 players loaded
+2016-06-01 19:29:30 INFO::30 unique teams identified
+2016-06-01 19:29:30 INFO::Downloading team box score summary data: begin
+2016-06-01 19:29:34 INFO::Downloading team box score summary data: complete
+2016-06-01 19:29:34 INFO::Number of games box score summaries expected = (30 teams * 82 games) = 2460 games
+2016-06-01 19:29:34 INFO::Number of games downloaded = 2460
+2016-06-01 19:29:34 INFO::Downloaded full regular season
+2016-06-01 19:29:34 INFO::Hypothesis test one: Game box score summary results can identify wins versus losses in NBA games with 90%+ accuracy.
+2016-06-01 19:29:34 INFO::Naive Bayes modeling & prediction: begin
+2016-06-01 19:29:35 INFO::Naive Bayes modeling & prediction: complete
+2016-06-01 19:29:35 INFO::Prediction test accuracy = 0.7602
+2016-06-01 19:29:35 INFO::Hypothesis test one via Naive Bayes: evidence supports hypothesis = FALSE
+2016-06-01 19:29:35 INFO::Hypothesis test two: NBA Q4 fouls contribute to game wins in non-overtime games.
+2016-06-01 19:29:35 INFO::Number of non-overtime regular season box score game summaries = 2306
+2016-06-01 19:29:35 INFO::NOTE: While each team has a box score summary for every game they play, each home & away team share a single play-by-play data file
+2016-06-01 19:29:35 INFO::Non-overtime game play-by-play data files expected = 1153
+2016-06-01 19:29:35 INFO::Number of play-by-play URLs identified = 1153
+2016-06-01 19:29:35 INFO::Play by Play RDS file found; loading from file
+2016-06-01 19:29:39 INFO::Play by play data: loaded
+2016-06-01 19:29:39 INFO::Downloaded all expected play by play logs
+2016-06-01 19:29:39 INFO::Create summary of foul data by game id, team, and period: begin
+2016-06-01 19:29:41 INFO::Create summary of foul data by game id, team, and period: end
+2016-06-01 19:29:41 INFO::Logistic Regression modeling: begin
+2016-06-01 19:29:42 INFO::Logistic Regression modeling: complete
+2016-06-01 19:29:42 INFO::Q4 Fouls p value = 0.0258
+2016-06-01 19:29:42 INFO::Hypothesis test two via logistic regression: evidence supports hypothesis = TRUE
+2016-06-01 19:29:42 INFO::PROGRAM END: FINAL PROJECT
+2016-06-02 17:55:32 INFO::PROGRAM START: FINAL PROJECT
+2016-06-02 17:55:32 INFO::Obtaining player list from: http://stats.nba.com/stats/commonallplayers?IsOnlyCurrentSeason=0&LeagueID=00&Season=2015-16
+2016-06-02 17:55:32 INFO::4073 players loaded
+2016-06-02 17:55:32 INFO::30 unique teams identified
+2016-06-02 17:55:32 INFO::Downloading team box score summary data: begin
+2016-06-02 17:55:43 INFO::Downloading team box score summary data: complete
+2016-06-02 17:55:43 INFO::Number of games box score summaries expected = (30 teams * 82 games) = 2460 games
+2016-06-02 17:55:43 INFO::Number of games downloaded = 2460
+2016-06-02 17:55:43 INFO::Downloaded full regular season
