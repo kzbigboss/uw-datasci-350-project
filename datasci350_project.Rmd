@@ -1,22 +1,11 @@
----
-title: "UW PCE Data Science 350 - Final Project"
-author: "Mark Kazzaz"
-date: "June 2, 2016"
-output: 
-  html_document:
-    toc: true
-    toc_float: false
-    theme: united
----
-
 # Project Overview
-The aim of this project was to perform statistical analysis on NBA data.  I set out to test two hypotheses:
+The aim of this project was to perform statistical analysis on NBA data.  I set out to test two questions:
 
-*  Hypothesis One: Box score summary data can be used to classify a win or a loss with 90%+ accuracy.
+*  Question One: Can box score summary data be used to classify a win or a loss with 90%+ accuracy?
     +  Box score summary data consists of: minutes played, points scored, field goals made/attempted, three pointers made/attempted, free throws made/attempted, offensive & defensive rebounds, assists, steals, blocks, turnovers, and personal fouls.
     +  I intentionally set a high accuracy rate of 90% because the box score summary data is only available *after* an NBA game concludes.  So in reality, you would already know if a team won or loss when box score summary data is available.
 
-*  Hypothesis Two: Q4 fouls contribute to wins in non-overtime regular season games.
+*  Question Two: Do Q4 fouls contribute to wins or losses in non-overtime regular season games?
     + NBA is unique from other sports in that taking fouls can be part of a game strategy.  
     + Fouling is notorious during Q4.
     + I decided to avoid overtime games.
@@ -24,15 +13,17 @@ The aim of this project was to perform statistical analysis on NBA data.  I set 
 
 ## Note on below code snippets
 
-The below code snippets are provided to help guide you through my basic methodology for acquiring, transforming, and analyzing the data.  Not all code used is presented in this write up.  
+The below code snippets are provided to help guide you through my basic methodology for acquiring, transforming, and analyzing the data.  
 
-If you're interested in seeing all my code, you can download it [here](https://www.dropbox.com/s/q7reaegp4a8wpbz/nba%20stats.r?dl=1).
+Not all code used is presented in this write up.  Some of the code presented is edited to be concise.
+
+If you're interested in seeing all my code, you can review all files associated to this project on [GitHub](https://github.com/kzbigboss/uw-datasci-350-project).
 
 # Data acquisition
 
 ## NBA.com/Stats website
 
-[NBA.com/Stats](http://stats.nba.com) is a site dedicated to making a variety of NBA stats available to review.  The struggle is they intentionally don't make it available for usage outside of their website.  Per their [FAQ](http://stats.nba.com/help/faq/):
+[NBA.com/Stats](http://stats.nba.com) is a site dedicated to making a variety of NBA stats available to review.  The struggle is they don't make it available for usage outside of their website.  Per their [FAQ](http://stats.nba.com/help/faq/):
 
 > Q: Are your statistics availble for download, or in CSV form?
 >
@@ -69,9 +60,9 @@ read_nba_stats <- function(address) {
 
 You'll notice I added a `closeAllConnection()` command in the above code.  This is because when I was using the formula to download 1000+ play-by-play data logs, R would run out of connections.  Adding `closeAllConnection()` after each run ensured I was able to use my `read_nba_stats()` function without running out of connections.
 
-## Data for hypothesis one
+## Data for question one
 
-In order to test this hypothesis, I needed all the box score summary results for all 30 teams for each of their 82 regular season games.  No way I was going to copy/paste 82 links via Chrome developer tools to figure this out.  Instead, I took the following approach:
+I needed all the box score summary results for all 30 teams for each of their 82 regular season games.  No way I was going to copy/paste (30 * 82) = 2,490 links via Chrome developer tools to figure this out.  Instead, I took the following approach:
 
 1. Found a javascript data file that contained all players and their current team assignments.
     i) [File link](http://stats.nba.com/stats/commonallplayers?IsOnlyCurrentSeason=0&LeagueID=00&Season=2015-16).
@@ -91,15 +82,15 @@ The code used was...
   players <- read_nba_stats(players_url)
   
   ## FILTER TO UNIQUE TEAMS
-  teams = unique(players[,c('TEAM_ID','TEAM_NAME')])
-  teams = teams[teams$TEAM_ID != 0,]
+  teams <- unique(players[,c('TEAM_ID','TEAM_NAME')])
+  teams <- teams[teams$TEAM_ID != 0,]
   
   ##CREATE URLS TO OBTAIN TEAM SEASON DATA FROM
-  teams$url = paste0("http://stats.nba.com/stats/teamgamelog?LeagueID=00&Season=2015-16&SeasonType=Regular+Season&TeamID=", teams$TEAM_ID)
+  teams$url <- paste0("http://stats.nba.com/stats/teamgamelog?LeagueID=00&Season=2015-16&SeasonType=Regular+Season&TeamID=", teams$TEAM_ID)
   
   ##DOWNLOAD DATA AND CREATE DATA FRAME
-  season_data = lapply(teams$url, read_nba_stats)
-  season_data = do.call(rbind.data.frame, season_data)
+  season_data <- lapply(teams$url, read_nba_stats)
+  season_data <- do.call(rbind.data.frame, season_data)
 ```
 
 ...and it turned data that looked like...
@@ -141,9 +132,9 @@ result:
  $ PTS      : int  81 105 114 97 107 115 106 120 93 133 ...
 ```
 
-## Data for hypothesis two
+## Data for question two
 
-In order to test this hypothesis, I needed to do a few things:
+I needed to do a few things:
 
 1.  Determine which games of the (30 * 82) = 2460 games were non-overtime games.
     i) This ended up being easy as games with (5 players * 4 periods * 12 minutes/period) = 240 minutes were non-overtime games.
@@ -168,12 +159,12 @@ The code to build out this data was:
   ## OBTAIN PLAY BY PLAY
   ### DOWNLOAD or LOAD DATA
   #### NBA Stats website expecting a 10 character game ID
-  nonovertime_data$Game_ID = formatC(nonovertime_data$Game_ID, width=10, format = "d", flag="0")  
+  nonovertime_data$Game_ID <- formatC(nonovertime_data$Game_ID, width=10, format = "d", flag="0")  
   
-  playbyplay_url = paste0("http://stats.nba.com/stats/playbyplayv2?EndPeriod=10&EndRange=55800&GameID=",
+  playbyplay_url <- paste0("http://stats.nba.com/stats/playbyplayv2?EndPeriod=10&EndRange=55800&GameID=",
     nonovertime_data$Game_ID,"&RangeType=2&Season=2015-16&SeasonType=Playoffs&StartPeriod=1&StartRange=0")
 
-  playbyplay_url = unique(playbyplay_url)     # Two teams share a game log, need to reduce to unique game
+  playbyplay_url <- unique(playbyplay_url)     # Two teams share a game log, need to reduce to unique game
                                               # log or else I'll download duplicates of every game log.
   
   ### NOTE:   THE FOLLOWING COMMAND CAN TAKE 20+ MINUTES IF
@@ -198,12 +189,12 @@ The code to build out this data was:
   playbyplay_foul_home <- aggregate(playbyplay_data_home$IS_FOUL, 
     by=list(GAME_ID=playbyplay_data_home$GAME_ID, PERIOD=playbyplay_data_home$PERIOD), sum)
   
-  playbyplay_foul_home$TEAM = "HOME"
+  playbyplay_foul_home$TEAM <- "HOME"
   
   playbyplay_foul_away <- aggregate(playbyplay_data_away$IS_FOUL, 
     by=list(GAME_ID=playbyplay_data_away$GAME_ID, PERIOD=playbyplay_data_away$PERIOD), sum)
   
-  playbyplay_foul_away$TEAM = "AWAY"
+  playbyplay_foul_away$TEAM <- "AWAY"
   
   playbyplay_foul_summary <- rbind(playbyplay_foul_away,playbyplay_foul_home)
   names(playbyplay_foul_summary) <- c("Game_ID","PERIOD","FOULS","TEAM")
@@ -251,7 +242,7 @@ The code to build out this data was:
 ```
 
 
-# Evaluating hypothesis one
+# Evaluating question one
 
 ## Confusion matrix for Naive Bayes model
 
@@ -303,11 +294,11 @@ Prediction   L   W
                                           
        'Positive' Class : L  
 ```
-## Hypothesis one result
+## Question one result
 
 My classification model is able to predict just over 76% of the box summary test dataset's win or loss outcome.  It's better than a random guess at 50%, but still doesn't meet my criteria of 90%+.
 
-# Evaluating hypothesis two
+# Evaluating question two
 
 ## Summary of Logstic Regression model
 With fouls by period added to the box score data, I created a logistic regression model to determine which attributes were significant for a game's win/loss result.  The output of the model was:
@@ -351,6 +342,6 @@ AIC: 1654.7
 Number of Fisher Scoring iterations: 6
 ```
 
-## Hypothesis two result
+## Question two result
 
 The null hypothesis would be "Q4 fouls do not contribute to game wins".  With a PERIOD4 p-value of 0.02578, we have weak evidence to prove false the null hypothesis at a 95% confidence level.  This isn't a sure fire conclusion that Q4 fouls contribute to game wins, but it is evidence that there's some significance associated to Q4 fouls and game wins.
