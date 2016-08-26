@@ -62,7 +62,7 @@ You'll notice I added a `closeAllConnection()` command in the above code.  This 
 
 ## Data for question one
 
-I needed all the box score summary results for all 30 teams for each of their 82 regular season games.  No way I was going to copy/paste (30 * 82) = 2,490 links via Chrome developer tools to figure this out.  Instead, I took the following approach:
+I needed all the box score summary results for all 30 teams for each of their 82 regular season games.  No way I was going to copy/paste (30 * 82) = 2,460 links via Chrome developer tools to figure this out.  Instead, I took the following approach:
 
 1. Found a javascript data file that contained all players and their current team assignments.
     i) [File link](http://stats.nba.com/stats/commonallplayers?IsOnlyCurrentSeason=0&LeagueID=00&Season=2015-16).
